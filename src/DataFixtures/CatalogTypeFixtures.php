@@ -8,7 +8,7 @@ use Doctrine\Bundle\FixturesBundle\Fixture;
 use Doctrine\Persistence\ObjectManager;
 use Tourze\CatalogBundle\Entity\CatalogType;
 
-class CatalogTypeFixtures extends Fixture
+final class CatalogTypeFixtures extends Fixture
 {
     public const REFERENCE_PRODUCT_TYPE = 'catalog-type-product';
     public const REFERENCE_ARTICLE_TYPE = 'catalog-type-article';
