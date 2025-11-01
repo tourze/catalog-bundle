@@ -35,6 +35,7 @@
     "tourze/doctrine-track-bundle": "1.0.*",
     "tourze/doctrine-user-bundle": "1.0.*",
     "tourze/easy-admin-menu-bundle": "1.0.*",
+    "tourze/easy-admin-tree-select-field-bundle": "1.0.*",
     "tourze/file-storage-bundle": "1.0.*",
     "tourze/json-rpc-cache-bundle": "1.0.*",
     "tourze/json-rpc-core": "1.0.*",
