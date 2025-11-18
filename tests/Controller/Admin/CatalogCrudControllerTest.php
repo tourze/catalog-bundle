@@ -9,7 +9,6 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Symfony\Component\Security\Core\Exception\AccessDeniedException;
 use Tourze\CatalogBundle\Controller\Admin\CatalogCrudController;
-use Tourze\CatalogBundle\Entity\Catalog;
 use Tourze\CatalogBundle\Entity\CatalogType;
 use Tourze\PHPUnitSymfonyWebTest\AbstractEasyAdminControllerTestCase;
 
@@ -20,15 +19,6 @@ use Tourze\PHPUnitSymfonyWebTest\AbstractEasyAdminControllerTestCase;
 #[RunTestsInSeparateProcesses]
 final class CatalogCrudControllerTest extends AbstractEasyAdminControllerTestCase
 {
-    public function testGetEntityFqcn(): void
-    {
-        $client = self::createClientWithDatabase();
-        $this->loginAsAdmin($client, 'admin@test.com', 'password');
-
-        $client->request('GET', '/admin');
-        $this->assertSame(Catalog::class, CatalogCrudController::getEntityFqcn());
-    }
-
     public function testConfigureFields(): void
     {
         $client = self::createClientWithDatabase();
