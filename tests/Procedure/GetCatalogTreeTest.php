@@ -8,11 +8,12 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Tourze\CatalogBundle\Entity\Catalog;
 use Tourze\CatalogBundle\Entity\CatalogType;
+use Tourze\CatalogBundle\Param\GetCatalogTreeParam;
 use Tourze\CatalogBundle\Procedure\GetCatalogTree;
 use Tourze\JsonRPC\Core\Exception\ApiException;
 use Tourze\JsonRPC\Core\Model\JsonRpcParams;
 use Tourze\JsonRPC\Core\Model\JsonRpcRequest;
-use Tourze\JsonRPC\Core\Tests\AbstractProcedureTestCase;
+use Tourze\PHPUnitJsonRPC\AbstractProcedureTestCase;
 
 /**
  * @internal
@@ -35,19 +36,22 @@ final class GetCatalogTreeTest extends AbstractProcedureTestCase
         $parentCatalog = $this->createCatalog('数码产品', $catalogType);
         $childCatalog = $this->createCatalog('手机', $catalogType, $parentCatalog);
 
-        $this->procedure->typeId = null;
-        $this->procedure->maxLevel = 2;
-        $this->procedure->enabledOnly = true;
-        $this->procedure->includeMetadata = false;
+        $param = new GetCatalogTreeParam(
+            typeId: null,
+            maxLevel: 2,
+            enabledOnly: true,
+            includeMetadata: false
+        );
 
-        $result = $this->procedure->execute();
+        $result = $this->procedure->execute($param);
+        $data = $result->data;
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('tree', $result);
-        $this->assertArrayHasKey('metadata', $result);
+        $this->assertIsArray($data);
+        $this->assertArrayHasKey('tree', $data);
+        $this->assertArrayHasKey('metadata', $data);
 
         /** @var array<string, mixed> $resultArray */
-        $resultArray = $result;
+        $resultArray = $data;
         $this->assertIsArray($resultArray['metadata']);
 
         /** @var array<string, mixed> $metadata */
@@ -71,16 +75,19 @@ final class GetCatalogTreeTest extends AbstractProcedureTestCase
         $parentCatalog = $this->createCatalog('数码产品', $catalogType);
         $childCatalog = $this->createCatalog('手机', $catalogType, $parentCatalog);
 
-        $this->procedure->typeId = $catalogType->getId();
-        $this->procedure->enabledOnly = true;
+        $param = new GetCatalogTreeParam(
+            typeId: (string) $catalogType->getId(),
+            enabledOnly: true
+        );
 
-        $result = $this->procedure->execute();
+        $result = $this->procedure->execute($param);
+        $data = $result->data;
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('metadata', $result);
+        $this->assertIsArray($data);
+        $this->assertArrayHasKey('metadata', $data);
 
         /** @var array<string, mixed> $resultArray */
-        $resultArray = $result;
+        $resultArray = $data;
         $this->assertIsArray($resultArray['metadata']);
 
         /** @var array<string, mixed> $metadata */
@@ -96,12 +103,14 @@ final class GetCatalogTreeTest extends AbstractProcedureTestCase
 
     public function testExecuteWithInvalidTypeId(): void
     {
-        $this->procedure->typeId = 'invalid-uuid-that-does-not-exist';
+        $param = new GetCatalogTreeParam(
+            typeId: 'invalid-uuid-that-does-not-exist'
+        );
 
         $this->expectException(ApiException::class);
         $this->expectExceptionMessage('分类类型不存在');
 
-        $this->procedure->execute();
+        $this->procedure->execute($param);
     }
 
     public function testExecuteWithDisabledTypeWhenEnabledOnly(): void
@@ -109,13 +118,15 @@ final class GetCatalogTreeTest extends AbstractProcedureTestCase
         // 创建一个禁用的分类类型
         $catalogType = $this->createCatalogType('禁用分类', 'disabled-' . uniqid(), false);
 
-        $this->procedure->typeId = $catalogType->getId();
-        $this->procedure->enabledOnly = true;
+        $param = new GetCatalogTreeParam(
+            typeId: (string) $catalogType->getId(),
+            enabledOnly: true
+        );
 
         $this->expectException(ApiException::class);
         $this->expectExceptionMessage('分类类型未启用');
 
-        $this->procedure->execute();
+        $this->procedure->execute($param);
     }
 
     public function testGetCacheKey(): void
@@ -134,7 +145,8 @@ final class GetCatalogTreeTest extends AbstractProcedureTestCase
 
     public function testGetCacheDuration(): void
     {
-        $request = $this->createMock(JsonRpcRequest::class);
+        $request = new JsonRpcRequest();
+        $request->setMethod('test.method');
 
         $duration = $this->procedure->getCacheDuration($request);
 
@@ -143,41 +155,28 @@ final class GetCatalogTreeTest extends AbstractProcedureTestCase
 
     public function testGetCacheTags(): void
     {
-        $request = $this->createMock(JsonRpcRequest::class);
-
         // 不带 typeId
-        $this->procedure->typeId = null;
+        $params = new JsonRpcParams([]);
+        $request = new JsonRpcRequest();
+        $request->setMethod('test.method');
+        $request->setParams($params);
+
         $tags = iterator_to_array($this->procedure->getCacheTags($request));
 
         $this->assertContains('catalog', $tags);
         $this->assertContains('catalog_tree', $tags);
 
         // 带 typeId
-        $this->procedure->typeId = '123';
+        $params = new JsonRpcParams(['typeId' => '123']);
+        $request = new JsonRpcRequest();
+        $request->setMethod('test.method');
+        $request->setParams($params);
+
         $tags = iterator_to_array($this->procedure->getCacheTags($request));
 
         $this->assertContains('catalog', $tags);
         $this->assertContains('catalog_tree', $tags);
         $this->assertContains('catalog_type_123', $tags);
-    }
-
-    public function testGetMockResult(): void
-    {
-        $mockResult = GetCatalogTree::getMockResult();
-
-        $this->assertIsArray($mockResult);
-        $this->assertArrayHasKey('tree', $mockResult);
-        $this->assertArrayHasKey('metadata', $mockResult);
-
-        $this->assertIsArray($mockResult['tree']);
-        $this->assertIsArray($mockResult['metadata']);
-
-        // 验证 metadata 结构
-        $metadata = $mockResult['metadata'];
-        $this->assertArrayHasKey('typeId', $metadata);
-        $this->assertArrayHasKey('typeName', $metadata);
-        $this->assertArrayHasKey('totalNodes', $metadata);
-        $this->assertArrayHasKey('maxLevel', $metadata);
     }
 
     /**

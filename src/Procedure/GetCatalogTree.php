@@ -4,15 +4,16 @@ declare(strict_types=1);
 
 namespace Tourze\CatalogBundle\Procedure;
 
-use Symfony\Component\Validator\Constraints as Assert;
 use Tourze\CatalogBundle\Entity\Catalog;
 use Tourze\CatalogBundle\Entity\CatalogType;
+use Tourze\CatalogBundle\Param\GetCatalogTreeParam;
 use Tourze\CatalogBundle\Repository\CatalogRepository;
 use Tourze\CatalogBundle\Repository\CatalogTypeRepository;
 use Tourze\JsonRPC\Core\Attribute\MethodDoc;
 use Tourze\JsonRPC\Core\Attribute\MethodExpose;
-use Tourze\JsonRPC\Core\Attribute\MethodParam;
 use Tourze\JsonRPC\Core\Attribute\MethodTag;
+use Tourze\JsonRPC\Core\Contracts\RpcParamInterface;
+use Tourze\JsonRPC\Core\Result\ArrayResult;
 use Tourze\JsonRPC\Core\Exception\ApiException;
 use Tourze\JsonRPC\Core\Model\JsonRpcRequest;
 use Tourze\JsonRPCCacheBundle\Procedure\CacheableProcedure;
@@ -22,48 +23,38 @@ use Tourze\JsonRPCCacheBundle\Procedure\CacheableProcedure;
 #[MethodExpose(method: 'GetCatalogTree')]
 final class GetCatalogTree extends CacheableProcedure
 {
-    #[MethodParam(description: '分类类型ID')]
-    public ?string $typeId = null;
-
-    #[MethodParam(description: '最大层级深度')]
-    #[Assert\Range(min: 1, max: 10)]
-    public int $maxLevel = 5;
-
-    #[MethodParam(description: '是否只获取启用的分类')]
-    public bool $enabledOnly = true;
-
-    #[MethodParam(description: '是否包含元数据')]
-    public bool $includeMetadata = false;
-
     public function __construct(
         private readonly CatalogRepository $catalogRepository,
         private readonly CatalogTypeRepository $catalogTypeRepository,
     ) {
     }
 
-    public function execute(): array
+    /**
+     * @phpstan-param GetCatalogTreeParam $param
+     */
+    public function execute(GetCatalogTreeParam|RpcParamInterface $param): ArrayResult
     {
-        $catalogType = $this->validateAndGetCatalogType();
-        $tree = $this->fetchRootCatalogs($catalogType);
+        $catalogType = $this->validateAndGetCatalogType($param);
+        $tree = $this->fetchRootCatalogs($catalogType, $param);
 
-        return [
-            'tree' => $this->formatTreeNodes($tree),
-            'metadata' => $this->buildMetadata($catalogType, $tree),
-        ];
+        return new ArrayResult([
+            'tree' => $this->formatTreeNodes($tree, $param),
+            'metadata' => $this->buildMetadata($catalogType, $tree, $param),
+        ]);
     }
 
-    private function validateAndGetCatalogType(): ?CatalogType
+    private function validateAndGetCatalogType(GetCatalogTreeParam $param): ?CatalogType
     {
-        if (!$this->hasValidTypeId()) {
+        if (!$this->hasValidTypeId($param)) {
             return null;
         }
 
-        $catalogType = $this->catalogTypeRepository->find($this->typeId);
+        $catalogType = $this->catalogTypeRepository->find($param->typeId);
         if (null === $catalogType) {
             throw new ApiException('分类类型不存在');
         }
 
-        if ($this->enabledOnly && !$catalogType->isEnabled()) {
+        if ($param->enabledOnly && !$catalogType->isEnabled()) {
             throw new ApiException('分类类型未启用');
         }
 
@@ -73,21 +64,21 @@ final class GetCatalogTree extends CacheableProcedure
     /**
      * @return array<Catalog>
      */
-    private function fetchRootCatalogs(?CatalogType $catalogType): array
+    private function fetchRootCatalogs(?CatalogType $catalogType, GetCatalogTreeParam $param): array
     {
         if (null !== $catalogType) {
-            return $this->fetchRootsByType($catalogType);
+            return $this->fetchRootsByType($catalogType, $param);
         }
 
-        return $this->fetchAllRoots();
+        return $this->fetchAllRoots($param);
     }
 
     /**
      * @return array<Catalog>
      */
-    private function fetchRootsByType(CatalogType $catalogType): array
+    private function fetchRootsByType(CatalogType $catalogType, GetCatalogTreeParam $param): array
     {
-        return $this->enabledOnly
+        return $param->enabledOnly
             ? $this->catalogRepository->findEnabledRootsByType($catalogType)
             : $this->catalogRepository->findRootsByType($catalogType);
     }
@@ -95,7 +86,7 @@ final class GetCatalogTree extends CacheableProcedure
     /**
      * @return array<Catalog>
      */
-    private function fetchAllRoots(): array
+    private function fetchAllRoots(GetCatalogTreeParam $param): array
     {
         $qb = $this->catalogRepository->createQueryBuilder('c')
             ->where('c.parent IS NULL')
@@ -103,7 +94,7 @@ final class GetCatalogTree extends CacheableProcedure
             ->addOrderBy('c.name', 'ASC')
         ;
 
-        if ($this->enabledOnly) {
+        if ($param->enabledOnly) {
             $qb->andWhere('c.enabled = :enabled')
                 ->setParameter('enabled', true)
             ;
@@ -117,28 +108,28 @@ final class GetCatalogTree extends CacheableProcedure
      * @param array<Catalog> $tree
      * @return array<string, mixed>
      */
-    private function buildMetadata(?CatalogType $catalogType, array $tree): array
+    private function buildMetadata(?CatalogType $catalogType, array $tree, GetCatalogTreeParam $param): array
     {
         return [
-            'typeId' => $this->typeId,
+            'typeId' => $param->typeId,
             'typeName' => $catalogType?->getName(),
             'totalNodes' => $this->countTreeNodes($tree),
             'maxLevel' => $this->getMaxTreeLevel($tree),
         ];
     }
 
-    private function hasValidTypeId(): bool
+    private function hasValidTypeId(GetCatalogTreeParam $param): bool
     {
-        return null !== $this->typeId && '' !== $this->typeId;
+        return null !== $param->typeId && '' !== $param->typeId;
     }
 
     /**
      * @param array<Catalog> $nodes
      * @return array<array<string, mixed>>
      */
-    private function formatTreeNodes(array $nodes): array
+    private function formatTreeNodes(array $nodes, GetCatalogTreeParam $param): array
     {
-        return array_map(function (Catalog $catalog): array {
+        return array_map(function (Catalog $catalog) use ($param): array {
             $data = [
                 'id' => $catalog->getId(),
                 'name' => $catalog->getName(),
@@ -150,14 +141,14 @@ final class GetCatalogTree extends CacheableProcedure
                 'hasChildren' => !$catalog->getChildren()->isEmpty(),
             ];
 
-            if ($this->includeMetadata && null !== $catalog->getMetadata()) {
+            if ($param->includeMetadata && null !== $catalog->getMetadata()) {
                 $data['metadata'] = $catalog->getMetadata();
             }
 
             // 递归处理子节点
             $children = $catalog->getChildren()->toArray();
-            if ([] !== $children && $catalog->getLevel() < $this->maxLevel - 1) {
-                $data['children'] = $this->formatTreeNodes($children);
+            if ([] !== $children && $catalog->getLevel() < $param->maxLevel - 1) {
+                $data['children'] = $this->formatTreeNodes($children, $param);
             } else {
                 $data['children'] = [];
             }
@@ -215,51 +206,16 @@ final class GetCatalogTree extends CacheableProcedure
      */
     public function getCacheTags(JsonRpcRequest $request): iterable
     {
-        $tags = ['catalog', 'catalog_tree'];
-        if (null !== $this->typeId && '' !== $this->typeId) {
-            $tags[] = 'catalog_type_' . $this->typeId;
-        }
+        yield 'catalog';
+        yield 'catalog_tree';
 
-        return $tags;
+        $typeId = $request->getParams()?->get('typeId', null);
+        if (null !== $typeId && '' !== $typeId) {
+            yield 'catalog_type_' . $typeId;
+        }
     }
 
     /**
      * @return array<string, mixed>
      */
-    public static function getMockResult(): array
-    {
-        return [
-            'tree' => [
-                [
-                    'id' => '1',
-                    'name' => '数码产品',
-                    'description' => '各类数码产品分类',
-                    'level' => 0,
-                    'path' => 'digital',
-                    'sortOrder' => 1,
-                    'enabled' => true,
-                    'hasChildren' => true,
-                    'children' => [
-                        [
-                            'id' => '2',
-                            'name' => '手机',
-                            'description' => '智能手机分类',
-                            'level' => 1,
-                            'path' => 'digital/phones',
-                            'sortOrder' => 1,
-                            'enabled' => true,
-                            'hasChildren' => false,
-                            'children' => [],
-                        ],
-                    ],
-                ],
-            ],
-            'metadata' => [
-                'typeId' => '1',
-                'typeName' => '商品分类',
-                'totalNodes' => 10,
-                'maxLevel' => 2,
-            ],
-        ];
-    }
 }

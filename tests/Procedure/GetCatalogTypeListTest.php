@@ -8,10 +8,11 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Tourze\CatalogBundle\Entity\Catalog;
 use Tourze\CatalogBundle\Entity\CatalogType;
+use Tourze\CatalogBundle\Param\GetCatalogTypeListParam;
 use Tourze\CatalogBundle\Procedure\GetCatalogTypeList;
 use Tourze\JsonRPC\Core\Model\JsonRpcParams;
 use Tourze\JsonRPC\Core\Model\JsonRpcRequest;
-use Tourze\JsonRPC\Core\Tests\AbstractProcedureTestCase;
+use Tourze\PHPUnitJsonRPC\AbstractProcedureTestCase;
 
 /**
  * @internal
@@ -33,22 +34,23 @@ final class GetCatalogTypeListTest extends AbstractProcedureTestCase
         $type1 = $this->createCatalogType('商品分类', 'product-' . uniqid(), '商品分类体系', true);
         $type2 = $this->createCatalogType('内容分类', 'content-' . uniqid(), '内容分类体系', true);
 
-        $this->procedure->keyword = null;
-        $this->procedure->enabledOnly = true;
-        $this->procedure->includeCatalogCount = false;
-        $this->procedure->orderBy = 'createTime';
-        $this->procedure->orderDir = 'DESC';
-        $this->procedure->currentPage = 1;
-        $this->procedure->pageSize = 10;
+        $param = new GetCatalogTypeListParam(
+            keyword: null,
+            enabledOnly: true,
+            includeCatalogCount: false,
+            orderBy: 'createTime',
+            orderDir: 'DESC',
+            pageSize: 10,
+            currentPage: 1,
+        );
 
-        $result = $this->procedure->execute();
+        $result = $this->procedure->execute($param);
+        $resultArray = $result->data;
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('list', $result);
-        $this->assertArrayHasKey('pagination', $result);
+        $this->assertIsArray($resultArray);
+        $this->assertArrayHasKey('list', $resultArray);
+        $this->assertArrayHasKey('pagination', $resultArray);
 
-        /** @var array<string, mixed> $resultArray */
-        $resultArray = $result;
         $this->assertIsArray($resultArray['list']);
         $this->assertGreaterThanOrEqual(2, \count($resultArray['list']));
 
@@ -74,17 +76,18 @@ final class GetCatalogTypeListTest extends AbstractProcedureTestCase
         $enabledType = $this->createCatalogType('启用分类', 'enabled-' . uniqid(), '启用的分类类型', true);
         $disabledType = $this->createCatalogType('禁用分类', 'disabled-' . uniqid(), '禁用的分类类型', false);
 
-        $this->procedure->enabledOnly = false;
-        $this->procedure->currentPage = 1;
-        $this->procedure->pageSize = 10;
+        $param = new GetCatalogTypeListParam(
+            enabledOnly: false,
+            currentPage: 1,
+            pageSize: 10,
+        );
 
-        $result = $this->procedure->execute();
+        $result = $this->procedure->execute($param);
+        $resultArray = $result->data;
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('list', $result);
+        $this->assertIsArray($resultArray);
+        $this->assertArrayHasKey('list', $resultArray);
 
-        /** @var array<string, mixed> $resultArray */
-        $resultArray = $result;
         $this->assertIsArray($resultArray['list']);
         $this->assertGreaterThanOrEqual(2, \count($resultArray['list']));
 
@@ -104,18 +107,19 @@ final class GetCatalogTypeListTest extends AbstractProcedureTestCase
         $type3 = $this->createCatalogType('用户分类', 'user-' . uniqid(), '用户管理分类', true);
 
         // 搜索包含"分类"的名称
-        $this->procedure->keyword = '文章';
-        $this->procedure->enabledOnly = true;
-        $this->procedure->currentPage = 1;
-        $this->procedure->pageSize = 10;
+        $param = new GetCatalogTypeListParam(
+            keyword: '文章',
+            enabledOnly: true,
+            currentPage: 1,
+            pageSize: 10,
+        );
 
-        $result = $this->procedure->execute();
+        $result = $this->procedure->execute($param);
+        $resultArray = $result->data;
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('list', $result);
+        $this->assertIsArray($resultArray);
+        $this->assertArrayHasKey('list', $resultArray);
 
-        /** @var array<string, mixed> $resultArray */
-        $resultArray = $result;
         $this->assertIsArray($resultArray['list']);
         $this->assertGreaterThanOrEqual(1, \count($resultArray['list']));
 
@@ -145,18 +149,19 @@ final class GetCatalogTypeListTest extends AbstractProcedureTestCase
         $catalog1 = $this->createCatalog('数码产品', $catalogType);
         $catalog2 = $this->createCatalog('服装鞋包', $catalogType);
 
-        $this->procedure->includeCatalogCount = true;
-        $this->procedure->enabledOnly = true;
-        $this->procedure->currentPage = 1;
-        $this->procedure->pageSize = 10;
+        $param = new GetCatalogTypeListParam(
+            includeCatalogCount: true,
+            enabledOnly: true,
+            currentPage: 1,
+            pageSize: 10,
+        );
 
-        $result = $this->procedure->execute();
+        $result = $this->procedure->execute($param);
+        $resultArray = $result->data;
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('list', $result);
+        $this->assertIsArray($resultArray);
+        $this->assertArrayHasKey('list', $resultArray);
 
-        /** @var array<string, mixed> $resultArray */
-        $resultArray = $result;
         $this->assertIsArray($resultArray['list']);
         $this->assertGreaterThanOrEqual(1, \count($resultArray['list']));
 
@@ -182,18 +187,19 @@ final class GetCatalogTypeListTest extends AbstractProcedureTestCase
         $type3 = $this->createCatalogType('C分类', 'c-type-' . uniqid(), 'C分类描述', true);
 
         // 测试按名称升序排列
-        $this->procedure->orderBy = 'name';
-        $this->procedure->orderDir = 'ASC';
-        $this->procedure->currentPage = 1;
-        $this->procedure->pageSize = 10;
+        $param = new GetCatalogTypeListParam(
+            orderBy: 'name',
+            orderDir: 'ASC',
+            currentPage: 1,
+            pageSize: 10,
+        );
 
-        $result = $this->procedure->execute();
+        $result = $this->procedure->execute($param);
+        $resultArray = $result->data;
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('list', $result);
+        $this->assertIsArray($resultArray);
+        $this->assertArrayHasKey('list', $resultArray);
 
-        /** @var array<string, mixed> $resultArray */
-        $resultArray = $result;
         $this->assertIsArray($resultArray['list']);
         $this->assertGreaterThanOrEqual(3, \count($resultArray['list']));
 
@@ -220,18 +226,19 @@ final class GetCatalogTypeListTest extends AbstractProcedureTestCase
         $type3 = $this->createCatalogType('分类M', 'm-code-' . uniqid(), 'M分类描述', true);
 
         // 测试按代码升序排列
-        $this->procedure->orderBy = 'code';
-        $this->procedure->orderDir = 'ASC';
-        $this->procedure->currentPage = 1;
-        $this->procedure->pageSize = 10;
+        $param = new GetCatalogTypeListParam(
+            orderBy: 'code',
+            orderDir: 'ASC',
+            currentPage: 1,
+            pageSize: 10,
+        );
 
-        $result = $this->procedure->execute();
+        $result = $this->procedure->execute($param);
+        $resultArray = $result->data;
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('list', $result);
+        $this->assertIsArray($resultArray);
+        $this->assertArrayHasKey('list', $resultArray);
 
-        /** @var array<string, mixed> $resultArray */
-        $resultArray = $result;
         $this->assertIsArray($resultArray['list']);
         $this->assertGreaterThanOrEqual(3, \count($resultArray['list']));
 
@@ -258,22 +265,25 @@ final class GetCatalogTypeListTest extends AbstractProcedureTestCase
         }
 
         // 测试第一页
-        $this->procedure->currentPage = 1;
-        $this->procedure->pageSize = 2;
-        $this->procedure->orderBy = 'name';
-        $this->procedure->orderDir = 'ASC';
+        $param = new GetCatalogTypeListParam(
+            currentPage: 1,
+            pageSize: 2,
+            orderBy: 'name',
+            orderDir: 'ASC',
+        );
 
-        $result = $this->procedure->execute();
+        $result = $this->procedure->execute($param);
+        $resultArray = $result->data;
 
-        $this->assertIsArray($result);
-        $this->assertArrayHasKey('list', $result);
-        $this->assertArrayHasKey('pagination', $result);
+        $this->assertIsArray($resultArray);
+        $this->assertArrayHasKey('list', $resultArray);
+        $this->assertArrayHasKey('pagination', $resultArray);
         /** @var array<mixed> $list */
-        $list = $result['list'];
+        $list = $resultArray['list'];
         $this->assertLessThanOrEqual(2, \count($list));
 
         /** @var array<mixed> $pagination */
-        $pagination = $result['pagination'];
+        $pagination = $resultArray['pagination'];
         $this->assertIsArray($pagination);
         $this->assertArrayHasKey('current', $pagination);
         $this->assertArrayHasKey('pageSize', $pagination);
@@ -304,7 +314,8 @@ final class GetCatalogTypeListTest extends AbstractProcedureTestCase
 
     public function testGetCacheDuration(): void
     {
-        $request = $this->createMock(JsonRpcRequest::class);
+        $request = new JsonRpcRequest();
+        $request->setMethod('catalog.type.list');
 
         $duration = $this->procedure->getCacheDuration($request);
 
@@ -313,51 +324,13 @@ final class GetCatalogTypeListTest extends AbstractProcedureTestCase
 
     public function testGetCacheTags(): void
     {
-        $request = $this->createMock(JsonRpcRequest::class);
+        $request = new JsonRpcRequest();
+        $request->setMethod('catalog.type.list');
 
         $tags = iterator_to_array($this->procedure->getCacheTags($request));
 
         $this->assertContains('catalog_type', $tags);
         $this->assertContains('catalog_type_list', $tags);
-    }
-
-    public function testGetMockResult(): void
-    {
-        $mockResult = GetCatalogTypeList::getMockResult();
-
-        $this->assertIsArray($mockResult);
-        $this->assertArrayHasKey('list', $mockResult);
-        $this->assertArrayHasKey('pagination', $mockResult);
-        $this->assertIsArray($mockResult['list']);
-        $this->assertIsArray($mockResult['pagination']);
-
-        // 检查列表项结构
-        /** @var array<string, mixed> $mockResultArray */
-        $mockResultArray = $mockResult;
-        $this->assertIsArray($mockResultArray['list']);
-
-        /** @var array<mixed> $list */
-        $list = $mockResultArray['list'];
-        if ([] !== $list) {
-            $this->assertIsArray($list[0]);
-            /** @var array<string, mixed> $item */
-            $item = $list[0];
-            $this->assertArrayHasKey('id', $item);
-            $this->assertArrayHasKey('code', $item);
-            $this->assertArrayHasKey('name', $item);
-            $this->assertArrayHasKey('description', $item);
-            $this->assertArrayHasKey('enabled', $item);
-            $this->assertArrayHasKey('createTime', $item);
-            $this->assertArrayHasKey('updateTime', $item);
-            $this->assertArrayHasKey('catalogCount', $item);
-        }
-
-        // 检查分页结构
-        $pagination = $mockResult['pagination'];
-        $this->assertArrayHasKey('current', $pagination);
-        $this->assertArrayHasKey('pageSize', $pagination);
-        $this->assertArrayHasKey('total', $pagination);
-        $this->assertArrayHasKey('hasMore', $pagination);
     }
 
     /**

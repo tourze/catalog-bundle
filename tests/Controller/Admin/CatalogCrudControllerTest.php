@@ -212,7 +212,6 @@ final class CatalogCrudControllerTest extends AbstractEasyAdminControllerTestCas
     /**
      * 返回 CatalogCrudController 的实例
      */
-    // @phpstan-ignore-next-line missingType.generics
     protected function getControllerService(): AbstractCrudController
     {
         return self::getService(CatalogCrudController::class);

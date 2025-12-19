@@ -15,7 +15,7 @@ use Tourze\PHPUnitSymfonyKernelTest\Attribute\AsRepository;
  * @extends ServiceEntityRepository<Catalog>
  */
 #[AsRepository(entityClass: Catalog::class)]
-class CatalogRepository extends ServiceEntityRepository
+final class CatalogRepository extends ServiceEntityRepository
 {
     public function __construct(ManagerRegistry $registry)
     {

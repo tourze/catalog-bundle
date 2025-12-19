@@ -8,11 +8,12 @@ use PHPUnit\Framework\Attributes\CoversClass;
 use PHPUnit\Framework\Attributes\RunTestsInSeparateProcesses;
 use Tourze\CatalogBundle\Entity\Catalog;
 use Tourze\CatalogBundle\Entity\CatalogType;
+use Tourze\CatalogBundle\Param\GetCatalogDetailParam;
 use Tourze\CatalogBundle\Procedure\GetCatalogDetail;
 use Tourze\JsonRPC\Core\Exception\ApiException;
 use Tourze\JsonRPC\Core\Model\JsonRpcParams;
 use Tourze\JsonRPC\Core\Model\JsonRpcRequest;
-use Tourze\JsonRPC\Core\Tests\AbstractProcedureTestCase;
+use Tourze\PHPUnitJsonRPC\AbstractProcedureTestCase;
 
 /**
  * @internal
@@ -35,26 +36,30 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
         $catalog = $this->createCatalog('数码产品', $catalogType);
 
         $this->assertNotNull($catalog->getId());
-        $this->procedure->catalogId = $catalog->getId();
-        $this->procedure->includeAncestors = false;
-        $this->procedure->includeChildren = false;
-        $this->procedure->includeSiblings = false;
-        $this->procedure->enabledOnly = true;
 
-        $result = $this->procedure->execute();
+        $param = new GetCatalogDetailParam(
+            catalogId: $catalog->getId(),
+            includeAncestors: false,
+            includeChildren: false,
+            includeSiblings: false,
+            enabledOnly: true
+        );
 
-        $this->assertIsArray($result);
-        $this->assertEquals($catalog->getId(), $result['id']);
-        $this->assertEquals('数码产品', $result['name']);
-        $this->assertEquals('数码产品描述', $result['description']);
-        $this->assertEquals(0, $result['level']);
-        $this->assertEquals($catalog->getPath(), $result['path']);
-        $this->assertTrue($result['enabled']);
-        $this->assertIsArray($result['type']);
-        $this->assertEquals($catalogType->getId(), $result['type']['id']);
-        $this->assertEquals('商品分类', $result['type']['name']);
-        $this->assertEquals($catalogType->getCode(), $result['type']['code']);
-        $this->assertNull($result['parent']);
+        $result = $this->procedure->execute($param);
+        $data = $result->data;
+
+        $this->assertIsArray($data);
+        $this->assertEquals($catalog->getId(), $data['id']);
+        $this->assertEquals('数码产品', $data['name']);
+        $this->assertEquals('数码产品描述', $data['description']);
+        $this->assertEquals(0, $data['level']);
+        $this->assertEquals($catalog->getPath(), $data['path']);
+        $this->assertTrue($data['enabled']);
+        $this->assertIsArray($data['type']);
+        $this->assertEquals($catalogType->getId(), $data['type']['id']);
+        $this->assertEquals('商品分类', $data['type']['name']);
+        $this->assertEquals($catalogType->getCode(), $data['type']['code']);
+        $this->assertNull($data['parent']);
     }
 
     public function testExecuteWithAncestors(): void
@@ -67,20 +72,24 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
 
         $childId = $child->getId();
         $this->assertNotNull($childId);
-        $this->procedure->catalogId = $childId;
-        $this->procedure->includeAncestors = true;
-        $this->procedure->includeChildren = false;
-        $this->procedure->includeSiblings = false;
 
-        $result = $this->procedure->execute();
-        $this->assertIsArray($result);
+        $param = new GetCatalogDetailParam(
+            catalogId: $childId,
+            includeAncestors: true,
+            includeChildren: false,
+            includeSiblings: false
+        );
 
-        $this->assertArrayHasKey('ancestors', $result);
-        $this->assertIsArray($result['ancestors']);
-        $this->assertGreaterThanOrEqual(2, \count($result['ancestors']));
+        $result = $this->procedure->execute($param);
+        $data = $result->data;
+        $this->assertIsArray($data);
+
+        $this->assertArrayHasKey('ancestors', $data);
+        $this->assertIsArray($data['ancestors']);
+        $this->assertGreaterThanOrEqual(2, \count($data['ancestors']));
 
         // 检查祖先数据结构
-        foreach ($result['ancestors'] as $ancestor) {
+        foreach ($data['ancestors'] as $ancestor) {
             $this->assertIsArray($ancestor);
             $this->assertArrayHasKey('id', $ancestor);
             $this->assertArrayHasKey('name', $ancestor);
@@ -99,19 +108,23 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
 
         $parentId = $parent->getId();
         $this->assertNotNull($parentId);
-        $this->procedure->catalogId = $parentId;
-        $this->procedure->includeChildren = true;
-        $this->procedure->enabledOnly = true;
 
-        $result = $this->procedure->execute();
-        $this->assertIsArray($result);
+        $param = new GetCatalogDetailParam(
+            catalogId: $parentId,
+            includeChildren: true,
+            enabledOnly: true
+        );
 
-        $this->assertArrayHasKey('children', $result);
-        $this->assertIsArray($result['children']);
-        $this->assertGreaterThanOrEqual(2, \count($result['children']));
+        $result = $this->procedure->execute($param);
+        $data = $result->data;
+        $this->assertIsArray($data);
+
+        $this->assertArrayHasKey('children', $data);
+        $this->assertIsArray($data['children']);
+        $this->assertGreaterThanOrEqual(2, \count($data['children']));
 
         // 检查子分类数据结构
-        foreach ($result['children'] as $child) {
+        foreach ($data['children'] as $child) {
             $this->assertIsArray($child);
             $this->assertArrayHasKey('id', $child);
             $this->assertArrayHasKey('name', $child);
@@ -123,7 +136,7 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
         }
 
         // 验证子分类是按排序字段排序的
-        $sortOrders = array_column($result['children'], 'sortOrder');
+        $sortOrders = array_column($data['children'], 'sortOrder');
         $this->assertEquals($sortOrders, array_values($sortOrders)); // 已排序
     }
 
@@ -138,18 +151,22 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
 
         $targetId = $target->getId();
         $this->assertNotNull($targetId);
-        $this->procedure->catalogId = $targetId;
-        $this->procedure->includeSiblings = true;
-        $this->procedure->enabledOnly = true;
 
-        $result = $this->procedure->execute();
+        $param = new GetCatalogDetailParam(
+            catalogId: $targetId,
+            includeSiblings: true,
+            enabledOnly: true
+        );
 
-        $this->assertArrayHasKey('siblings', $result);
-        $this->assertIsArray($result['siblings']);
-        $this->assertCount(2, $result['siblings']); // 不包含自己
+        $result = $this->procedure->execute($param);
+        $data = $result->data;
+
+        $this->assertArrayHasKey('siblings', $data);
+        $this->assertIsArray($data['siblings']);
+        $this->assertCount(2, $data['siblings']); // 不包含自己
 
         // 确认没有包含目标分类本身
-        $siblingIds = array_column($result['siblings'], 'id');
+        $siblingIds = array_column($data['siblings'], 'id');
         $this->assertNotContains($target->getId(), $siblingIds);
 
         // 但包含其他兄弟分类
@@ -159,12 +176,14 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
 
     public function testExecuteWithNonExistentCatalog(): void
     {
-        $this->procedure->catalogId = 'non-existent-id';
+        $param = new GetCatalogDetailParam(
+            catalogId: 'non-existent-id'
+        );
 
         $this->expectException(ApiException::class);
         $this->expectExceptionMessage('分类不存在');
 
-        $this->procedure->execute();
+        $this->procedure->execute($param);
     }
 
     public function testExecuteWithDisabledCatalogWhenEnabledOnly(): void
@@ -176,13 +195,16 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
         $this->persistAndFlush($catalog);
 
         $this->assertNotNull($catalog->getId());
-        $this->procedure->catalogId = $catalog->getId();
-        $this->procedure->enabledOnly = true;
+
+        $param = new GetCatalogDetailParam(
+            catalogId: $catalog->getId(),
+            enabledOnly: true
+        );
 
         $this->expectException(ApiException::class);
         $this->expectExceptionMessage('分类未启用');
 
-        $this->procedure->execute();
+        $this->procedure->execute($param);
     }
 
     public function testExecuteWithDisabledCatalogWhenEnabledOnlyFalse(): void
@@ -194,14 +216,18 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
         $this->persistAndFlush($catalog);
 
         $this->assertNotNull($catalog->getId());
-        $this->procedure->catalogId = $catalog->getId();
-        $this->procedure->enabledOnly = false;
 
-        $result = $this->procedure->execute();
+        $param = new GetCatalogDetailParam(
+            catalogId: $catalog->getId(),
+            enabledOnly: false
+        );
 
-        $this->assertIsArray($result);
-        $this->assertEquals($catalog->getId(), $result['id']);
-        $this->assertFalse($result['enabled']);
+        $result = $this->procedure->execute($param);
+        $data = $result->data;
+
+        $this->assertIsArray($data);
+        $this->assertEquals($catalog->getId(), $data['id']);
+        $this->assertFalse($data['enabled']);
     }
 
     public function testGetCacheKey(): void
@@ -224,7 +250,8 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
 
     public function testGetCacheDuration(): void
     {
-        $request = $this->createMock(JsonRpcRequest::class);
+        $request = new JsonRpcRequest();
+        $request->setMethod('catalog.detail');
 
         $duration = $this->procedure->getCacheDuration($request);
 
@@ -233,29 +260,15 @@ final class GetCatalogDetailTest extends AbstractProcedureTestCase
 
     public function testGetCacheTags(): void
     {
-        $request = $this->createMock(JsonRpcRequest::class);
-        $this->procedure->catalogId = '123';
+        $params = new JsonRpcParams(['catalogId' => '123']);
+        $request = new JsonRpcRequest();
+        $request->setMethod('catalog.detail');
+        $request->setParams($params);
 
         $tags = iterator_to_array($this->procedure->getCacheTags($request));
 
         $this->assertContains('catalog', $tags);
         $this->assertContains('catalog_123', $tags);
-    }
-
-    public function testGetMockResult(): void
-    {
-        $mockResult = GetCatalogDetail::getMockResult();
-
-        $this->assertIsArray($mockResult);
-        $this->assertArrayHasKey('id', $mockResult);
-        $this->assertArrayHasKey('name', $mockResult);
-        $this->assertArrayHasKey('description', $mockResult);
-        $this->assertArrayHasKey('level', $mockResult);
-        $this->assertArrayHasKey('path', $mockResult);
-        $this->assertArrayHasKey('enabled', $mockResult);
-        $this->assertArrayHasKey('type', $mockResult);
-        $this->assertArrayHasKey('createTime', $mockResult);
-        $this->assertArrayHasKey('updateTime', $mockResult);
     }
 
     /**

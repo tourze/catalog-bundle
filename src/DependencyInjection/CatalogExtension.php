@@ -4,7 +4,7 @@ namespace Tourze\CatalogBundle\DependencyInjection;
 
 use Tourze\SymfonyDependencyServiceLoader\AutoExtension;
 
-class CatalogExtension extends AutoExtension
+final class CatalogExtension extends AutoExtension
 {
     protected function getConfigDir(): string
     {

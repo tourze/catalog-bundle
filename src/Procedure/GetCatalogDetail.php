@@ -4,13 +4,14 @@ declare(strict_types=1);
 
 namespace Tourze\CatalogBundle\Procedure;
 
-use Symfony\Component\Validator\Constraints as Assert;
 use Tourze\CatalogBundle\Entity\Catalog;
+use Tourze\CatalogBundle\Param\GetCatalogDetailParam;
 use Tourze\CatalogBundle\Repository\CatalogRepository;
 use Tourze\JsonRPC\Core\Attribute\MethodDoc;
 use Tourze\JsonRPC\Core\Attribute\MethodExpose;
-use Tourze\JsonRPC\Core\Attribute\MethodParam;
 use Tourze\JsonRPC\Core\Attribute\MethodTag;
+use Tourze\JsonRPC\Core\Contracts\RpcParamInterface;
+use Tourze\JsonRPC\Core\Result\ArrayResult;
 use Tourze\JsonRPC\Core\Exception\ApiException;
 use Tourze\JsonRPC\Core\Model\JsonRpcRequest;
 use Tourze\JsonRPCCacheBundle\Procedure\CacheableProcedure;
@@ -20,46 +21,34 @@ use Tourze\JsonRPCCacheBundle\Procedure\CacheableProcedure;
 #[MethodExpose(method: 'GetCatalogDetail')]
 final class GetCatalogDetail extends CacheableProcedure
 {
-    #[MethodParam(description: '分类ID')]
-    #[Assert\NotBlank]
-    public string $catalogId;
-
-    #[MethodParam(description: '是否包含祖先分类')]
-    public bool $includeAncestors = false;
-
-    #[MethodParam(description: '是否包含直接子分类')]
-    public bool $includeChildren = false;
-
-    #[MethodParam(description: '是否包含兄弟分类')]
-    public bool $includeSiblings = false;
-
-    #[MethodParam(description: '是否只获取启用的分类')]
-    public bool $enabledOnly = true;
-
     public function __construct(
         private readonly CatalogRepository $catalogRepository,
     ) {
     }
 
-    public function execute(): array
+    /**
+     * @phpstan-param GetCatalogDetailParam $param
+     */
+    public function execute(GetCatalogDetailParam|RpcParamInterface $param): ArrayResult
     {
-        $catalog = $this->validateAndGetCatalog();
+        $catalog = $this->validateAndGetCatalog($param);
         $result = $this->buildBasicCatalogData($catalog);
 
-        $result = $this->appendAncestorsIfRequested($result, $catalog);
-        $result = $this->appendChildrenIfRequested($result, $catalog);
+        $result = $this->appendAncestorsIfRequested($result, $catalog, $param);
+        $result = $this->appendChildrenIfRequested($result, $catalog, $param);
+        $result = $this->appendSiblingsIfRequested($result, $catalog, $param);
 
-        return $this->appendSiblingsIfRequested($result, $catalog);
+        return new ArrayResult($result);
     }
 
-    private function validateAndGetCatalog(): Catalog
+    private function validateAndGetCatalog(GetCatalogDetailParam $param): Catalog
     {
-        $catalog = $this->catalogRepository->find($this->catalogId);
+        $catalog = $this->catalogRepository->find($param->catalogId);
         if (null === $catalog) {
             throw new ApiException('分类不存在');
         }
 
-        if ($this->enabledOnly && !$catalog->isEnabled()) {
+        if ($param->enabledOnly && !$catalog->isEnabled()) {
             throw new ApiException('分类未启用');
         }
 
@@ -100,9 +89,9 @@ final class GetCatalogDetail extends CacheableProcedure
      * @param array<string, mixed> $result
      * @return array<string, mixed>
      */
-    private function appendAncestorsIfRequested(array $result, Catalog $catalog): array
+    private function appendAncestorsIfRequested(array $result, Catalog $catalog, GetCatalogDetailParam $param): array
     {
-        if (!$this->includeAncestors) {
+        if (!$param->includeAncestors) {
             return $result;
         }
 
@@ -121,13 +110,13 @@ final class GetCatalogDetail extends CacheableProcedure
      * @param array<string, mixed> $result
      * @return array<string, mixed>
      */
-    private function appendChildrenIfRequested(array $result, Catalog $catalog): array
+    private function appendChildrenIfRequested(array $result, Catalog $catalog, GetCatalogDetailParam $param): array
     {
-        if (!$this->includeChildren) {
+        if (!$param->includeChildren) {
             return $result;
         }
 
-        $children = $this->getFilteredChildren($catalog);
+        $children = $this->getFilteredChildren($catalog, $param);
         $result['children'] = $this->formatCatalogNodes($children);
         usort($result['children'], static fn (array $a, array $b): int => $a['sortOrder'] <=> $b['sortOrder']);
 
@@ -138,13 +127,13 @@ final class GetCatalogDetail extends CacheableProcedure
      * @param array<string, mixed> $result
      * @return array<string, mixed>
      */
-    private function appendSiblingsIfRequested(array $result, Catalog $catalog): array
+    private function appendSiblingsIfRequested(array $result, Catalog $catalog, GetCatalogDetailParam $param): array
     {
-        if (!$this->includeSiblings || null === $catalog->getParent()) {
+        if (!$param->includeSiblings || null === $catalog->getParent()) {
             return $result;
         }
 
-        $siblings = $this->getFilteredSiblings($catalog);
+        $siblings = $this->getFilteredSiblings($catalog, $param);
         $result['siblings'] = $this->formatCatalogNodes($siblings);
         usort($result['siblings'], static fn (array $a, array $b): int => $a['sortOrder'] <=> $b['sortOrder']);
 
@@ -154,11 +143,11 @@ final class GetCatalogDetail extends CacheableProcedure
     /**
      * @return array<Catalog>
      */
-    private function getFilteredChildren(Catalog $catalog): array
+    private function getFilteredChildren(Catalog $catalog, GetCatalogDetailParam $param): array
     {
         $children = $catalog->getChildren()->toArray();
 
-        return $this->enabledOnly
+        return $param->enabledOnly
             ? array_filter($children, static fn (Catalog $child): bool => $child->isEnabled())
             : $children;
     }
@@ -166,7 +155,7 @@ final class GetCatalogDetail extends CacheableProcedure
     /**
      * @return array<Catalog>
      */
-    private function getFilteredSiblings(Catalog $catalog): array
+    private function getFilteredSiblings(Catalog $catalog, GetCatalogDetailParam $param): array
     {
         $parent = $catalog->getParent();
         if (null === $parent) {
@@ -176,7 +165,7 @@ final class GetCatalogDetail extends CacheableProcedure
         $siblings = $parent->getChildren()->toArray();
         $siblings = array_filter($siblings, static fn (Catalog $sibling): bool => $sibling->getId() !== $catalog->getId());
 
-        return $this->enabledOnly
+        return $param->enabledOnly
             ? array_filter($siblings, static fn (Catalog $sibling): bool => $sibling->isEnabled())
             : $siblings;
     }
@@ -218,61 +207,13 @@ final class GetCatalogDetail extends CacheableProcedure
      */
     public function getCacheTags(JsonRpcRequest $request): iterable
     {
-        return [
-            'catalog',
-            'catalog_' . $this->catalogId,
-        ];
+        $catalogId = $request->getParams()?->get('catalogId', '');
+
+        yield 'catalog';
+        yield 'catalog_' . $catalogId;
     }
 
     /**
      * @return array<string, mixed>
      */
-    public static function getMockResult(): array
-    {
-        return [
-            'id' => '1',
-            'name' => '数码产品',
-            'description' => '各类数码产品分类，包含手机、电脑、相机等电子产品',
-            'level' => 0,
-            'path' => 'digital',
-            'sortOrder' => 1,
-            'enabled' => true,
-            'metadata' => [
-                'icon' => 'digital-icon.svg',
-                'banner' => 'digital-banner.jpg',
-                'keywords' => ['数码', '电子', '科技'],
-            ],
-            'type' => [
-                'id' => '1',
-                'name' => '商品分类',
-                'code' => 'product',
-                'description' => '商品分类体系',
-            ],
-            'parent' => null,
-            'ancestors' => [],
-            'children' => [
-                [
-                    'id' => '2',
-                    'name' => '手机',
-                    'path' => 'digital/phones',
-                    'level' => 1,
-                    'sortOrder' => 1,
-                    'enabled' => true,
-                    'hasChildren' => true,
-                ],
-                [
-                    'id' => '3',
-                    'name' => '电脑',
-                    'path' => 'digital/computers',
-                    'level' => 1,
-                    'sortOrder' => 2,
-                    'enabled' => true,
-                    'hasChildren' => true,
-                ],
-            ],
-            'siblings' => [],
-            'createTime' => '2024-01-01 12:00:00',
-            'updateTime' => '2024-01-01 12:00:00',
-        ];
-    }
 }

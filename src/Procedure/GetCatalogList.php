@@ -5,14 +5,15 @@ declare(strict_types=1);
 namespace Tourze\CatalogBundle\Procedure;
 
 use Doctrine\ORM\QueryBuilder;
-use Symfony\Component\Validator\Constraints as Assert;
 use Tourze\CatalogBundle\Entity\Catalog;
+use Tourze\CatalogBundle\Param\GetCatalogListParam;
 use Tourze\CatalogBundle\Repository\CatalogRepository;
 use Tourze\CatalogBundle\Repository\CatalogTypeRepository;
 use Tourze\JsonRPC\Core\Attribute\MethodDoc;
 use Tourze\JsonRPC\Core\Attribute\MethodExpose;
-use Tourze\JsonRPC\Core\Attribute\MethodParam;
 use Tourze\JsonRPC\Core\Attribute\MethodTag;
+use Tourze\JsonRPC\Core\Contracts\RpcParamInterface;
+use Tourze\JsonRPC\Core\Result\ArrayResult;
 use Tourze\JsonRPC\Core\Exception\ApiException;
 use Tourze\JsonRPC\Core\Procedure\BaseProcedure;
 use Tourze\JsonRPCPaginatorBundle\Procedure\PaginatorTrait;
@@ -24,152 +25,134 @@ final class GetCatalogList extends BaseProcedure
 {
     use PaginatorTrait;
 
-    #[MethodParam(description: '分类类型编码')]
-    public ?string $typeCode = null;
-
-    #[MethodParam(description: '父级分类ID')]
-    public ?string $parentId = null;
-
-    #[MethodParam(description: '搜索关键词')]
-    public ?string $keyword = null;
-
-    #[MethodParam(description: '是否只获取启用的分类')]
-    public bool $enabledOnly = true;
-
-    #[MethodParam(description: '是否包含子分类数量')]
-    public bool $includeChildrenCount = false;
-
-    #[MethodParam(description: '排序字段')]
-    #[Assert\Choice(choices: ['sortOrder', 'name', 'createTime', 'updateTime'])]
-    public string $orderBy = 'sortOrder';
-
-    #[MethodParam(description: '排序方向')]
-    #[Assert\Choice(choices: ['ASC', 'DESC'])]
-    public string $orderDir = 'ASC';
-
     public function __construct(
         private readonly CatalogRepository $catalogRepository,
         private readonly CatalogTypeRepository $catalogTypeRepository,
     ) {
     }
 
-    public function execute(): array
+    /**
+     * @phpstan-param GetCatalogListParam $param
+     */
+    public function execute(GetCatalogListParam|RpcParamInterface $param): ArrayResult
     {
-        $this->validateTypeCode();
-        $this->validateParentId();
+        $this->validateTypeCode($param);
+        $this->validateParentId($param);
 
-        $qb = $this->buildQuery();
+        $qb = $this->buildQuery($param);
 
-        return $this->fetchList(
+        return new ArrayResult($this->fetchList(
             $qb,
-            fn (Catalog $catalog): array => $this->formatCatalogData($catalog)
-        );
+            fn (Catalog $catalog): array => $this->formatCatalogData($catalog, $param),
+            null,
+            $param
+        ));
     }
 
-    private function validateTypeCode(): void
+    private function validateTypeCode(GetCatalogListParam $param): void
     {
-        if (!$this->hasValidTypeCode()) {
+        if (!$this->hasValidTypeCode($param)) {
             return;
         }
 
-        $catalogType = $this->catalogTypeRepository->findOneByCode((string) $this->typeCode);
+        $catalogType = $this->catalogTypeRepository->findOneByCode((string) $param->typeCode);
         if (null === $catalogType) {
             throw new ApiException('分类类型不存在');
         }
 
-        if ($this->enabledOnly && !$catalogType->isEnabled()) {
+        if ($param->enabledOnly && !$catalogType->isEnabled()) {
             throw new ApiException('分类类型未启用');
         }
     }
 
-    private function validateParentId(): void
+    private function validateParentId(GetCatalogListParam $param): void
     {
-        if (!$this->hasValidParentId()) {
+        if (!$this->hasValidParentId($param)) {
             return;
         }
 
-        $parentCatalog = $this->catalogRepository->find($this->parentId);
+        $parentCatalog = $this->catalogRepository->find($param->parentId);
         if (null === $parentCatalog) {
             throw new ApiException('父级分类不存在');
         }
 
-        if ($this->enabledOnly && !$parentCatalog->isEnabled()) {
+        if ($param->enabledOnly && !$parentCatalog->isEnabled()) {
             throw new ApiException('父级分类未启用');
         }
     }
 
-    private function buildQuery(): QueryBuilder
+    private function buildQuery(GetCatalogListParam $param): QueryBuilder
     {
         $qb = $this->catalogRepository->createQueryBuilder('c')
-            ->orderBy('c.' . $this->orderBy, $this->orderDir)
+            ->orderBy('c.' . $param->orderBy, $param->orderDir)
         ;
 
-        $this->applyTypeFilter($qb);
-        $this->applyParentFilter($qb);
-        $this->applyEnabledFilter($qb);
-        $this->applyKeywordFilter($qb);
+        $this->applyTypeFilter($qb, $param);
+        $this->applyParentFilter($qb, $param);
+        $this->applyEnabledFilter($qb, $param);
+        $this->applyKeywordFilter($qb, $param);
 
         return $qb;
     }
 
-    private function applyTypeFilter(QueryBuilder $qb): void
+    private function applyTypeFilter(QueryBuilder $qb, GetCatalogListParam $param): void
     {
-        if ($this->hasValidTypeCode()) {
+        if ($this->hasValidTypeCode($param)) {
             $qb->join('c.type', 'ct')
                 ->andWhere('ct.code = :typeCode')
-                ->setParameter('typeCode', $this->typeCode)
+                ->setParameter('typeCode', $param->typeCode)
             ;
         }
     }
 
-    private function applyParentFilter(QueryBuilder $qb): void
+    private function applyParentFilter(QueryBuilder $qb, GetCatalogListParam $param): void
     {
-        if ($this->hasValidParentId()) {
+        if ($this->hasValidParentId($param)) {
             $qb->andWhere('c.parent = :parentId')
-                ->setParameter('parentId', $this->parentId)
+                ->setParameter('parentId', $param->parentId)
             ;
-        } elseif (null === $this->parentId) {
+        } elseif (null === $param->parentId) {
             $qb->andWhere('c.parent IS NULL');
         }
     }
 
-    private function applyEnabledFilter(QueryBuilder $qb): void
+    private function applyEnabledFilter(QueryBuilder $qb, GetCatalogListParam $param): void
     {
-        if ($this->enabledOnly) {
+        if ($param->enabledOnly) {
             $qb->andWhere('c.enabled = :enabled')
                 ->setParameter('enabled', true)
             ;
         }
     }
 
-    private function applyKeywordFilter(QueryBuilder $qb): void
+    private function applyKeywordFilter(QueryBuilder $qb, GetCatalogListParam $param): void
     {
-        if ($this->hasValidKeyword()) {
+        if ($this->hasValidKeyword($param)) {
             $qb->andWhere('c.name LIKE :keyword OR c.description LIKE :keyword')
-                ->setParameter('keyword', '%' . $this->keyword . '%')
+                ->setParameter('keyword', '%' . $param->keyword . '%')
             ;
         }
     }
 
-    private function hasValidTypeCode(): bool
+    private function hasValidTypeCode(GetCatalogListParam $param): bool
     {
-        return null !== $this->typeCode && '' !== $this->typeCode;
+        return null !== $param->typeCode && '' !== $param->typeCode;
     }
 
-    private function hasValidParentId(): bool
+    private function hasValidParentId(GetCatalogListParam $param): bool
     {
-        return null !== $this->parentId && '' !== $this->parentId;
+        return null !== $param->parentId && '' !== $param->parentId;
     }
 
-    private function hasValidKeyword(): bool
+    private function hasValidKeyword(GetCatalogListParam $param): bool
     {
-        return null !== $this->keyword && '' !== $this->keyword;
+        return null !== $param->keyword && '' !== $param->keyword;
     }
 
     /**
      * @return array<string, mixed>
      */
-    private function formatCatalogData(Catalog $catalog): array
+    private function formatCatalogData(Catalog $catalog, GetCatalogListParam $param): array
     {
         $data = [
             'id' => $catalog->getId(),
@@ -195,7 +178,7 @@ final class GetCatalogList extends BaseProcedure
             'updateTime' => $catalog->getUpdateTime()?->format('Y-m-d H:i:s'),
         ];
 
-        if ($this->includeChildrenCount) {
+        if ($param->includeChildrenCount) {
             $data['childrenCount'] = $catalog->getChildren()->count();
         }
 
@@ -210,55 +193,4 @@ final class GetCatalogList extends BaseProcedure
     /**
      * @return array<string, mixed>
      */
-    public static function getMockResult(): array
-    {
-        return [
-            'list' => [
-                [
-                    'id' => '1',
-                    'name' => '数码产品',
-                    'description' => '各类数码产品分类',
-                    'level' => 0,
-                    'path' => 'digital',
-                    'sortOrder' => 1,
-                    'enabled' => true,
-                    'hasChildren' => true,
-                    'type' => [
-                        'id' => '1',
-                        'name' => '商品分类',
-                        'code' => 'product',
-                    ],
-                    'parent' => null,
-                    'childrenCount' => 5,
-                    'createTime' => '2024-01-01 12:00:00',
-                    'updateTime' => '2024-01-01 12:00:00',
-                ],
-                [
-                    'id' => '2',
-                    'name' => '服装鞋包',
-                    'description' => '时尚服装和配件',
-                    'level' => 0,
-                    'path' => 'fashion',
-                    'sortOrder' => 2,
-                    'enabled' => true,
-                    'hasChildren' => true,
-                    'type' => [
-                        'id' => '1',
-                        'name' => '商品分类',
-                        'code' => 'product',
-                    ],
-                    'parent' => null,
-                    'childrenCount' => 3,
-                    'createTime' => '2024-01-01 12:00:00',
-                    'updateTime' => '2024-01-01 12:00:00',
-                ],
-            ],
-            'pagination' => [
-                'current' => 1,
-                'pageSize' => 20,
-                'total' => 2,
-                'hasMore' => false,
-            ],
-        ];
-    }
 }
