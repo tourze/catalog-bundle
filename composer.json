@@ -39,7 +39,7 @@
     "tourze/file-storage-bundle": "1.0.*",
     "tourze/json-rpc-cache-bundle": "1.0.*",
     "tourze/json-rpc-core": "2.0.*",
-    "tourze/json-rpc-lock-bundle": "1.0.*",
+    "tourze/json-rpc-lock-bundle": "2.0.*",
     "tourze/json-rpc-paginator-bundle": "1.0.*",
     "tourze/symfony-dependency-service-loader": "1.0.*"
   },
