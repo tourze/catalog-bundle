@@ -37,10 +37,10 @@
     "tourze/easy-admin-menu-bundle": "1.0.*",
     "tourze/easy-admin-tree-select-field-bundle": "1.0.*",
     "tourze/file-storage-bundle": "1.0.*",
-    "tourze/json-rpc-cache-bundle": "1.0.*",
+    "tourze/json-rpc-cache-bundle": "2.0.*",
     "tourze/json-rpc-core": "2.0.*",
     "tourze/json-rpc-lock-bundle": "2.0.*",
-    "tourze/json-rpc-paginator-bundle": "1.0.*",
+    "tourze/json-rpc-paginator-bundle": "2.0.*",
     "tourze/symfony-dependency-service-loader": "1.0.*"
   },
   "require-dev": {
